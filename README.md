@@ -1,0 +1,1 @@
+una vez que se ejecuta el codigo "clasificador_basura.py" se creará un archivo "modelo_cnn.h5" que contendrá los pesos del modelo, para posteriormente pasarlo a formato web con los archivos (json y bin)
