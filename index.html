@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Clasificador de Basura - Cámara</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.18.0/dist/tf.min.js"></script>
+  <link rel="stylesheet" href="css/belleza.css">
+</head>
+<body>
+  <h1>Clasificador de residuos</h1>
+  <video id="video" autoplay></video>
+  <canvas id="canvas" width="100" height="100"></canvas>
+  <h3 id="resultado">Esperando predicción...</h3>
+  <div id="loading">Cargando modelo...</div>
+
+  <script>
+    let modelo;
+    const clases = ["carton", "plastico", "vidrio"];
+    let modeloCargado = false;
+
+    async function cargarModelo() {
+      try {
+        modelo = await tf.loadLayersModel("carpeta_salida/model.json");
+        const inputShape = modelo.inputs[0].shape;
+        if (!inputShape || inputShape.length !== 4) {
+          throw new Error("El modelo no tiene una forma de entrada válida (batchInputShape requerido)");
+        }
+
+        console.log("✅ Modelo cargado. Forma de entrada:", inputShape);
+        document.getElementById("loading").style.display = "none";
+        modeloCargado = true;
+        iniciarPredicciones();
+      } catch (error) {
+        console.error("Error cargando el modelo:", error);
+        document.getElementById("loading").innerHTML = 
+          `Error cargando el modelo: ${error.message}<br>
+           Asegúrate que el modelo tenga definido batchInputShape`;
+      }
+    }
+
+    async function iniciarCamara() {
+      try {
+        const video = document.getElementById("video");
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            width: { ideal: 300 }, 
+            height: { ideal: 300 },
+            facingMode: "environment" 
+          } 
+        });
+        video.srcObject = stream;
+      } catch (error) {
+        console.error("Error accediendo a la cámara:", error);
+        alert("No se pudo acceder a la cámara. Asegúrate de permitir el acceso.");
+      }
+    }
+
+    async function predecir() {
+      if (!modeloCargado) return;
+
+      const video = document.getElementById("video");
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+      const resultadoElement = document.getElementById("resultado");
+
+      try {
+        ctx.drawImage(video, 0, 0, 100, 100);
+        const imageData = ctx.getImageData(0, 0, 100, 100);
+        let tensor = tf.browser.fromPixels(imageData, 1)
+          .toFloat()
+          .div(255.0)
+          .expandDims(0);
+
+        const inputShape = modelo.inputs[0].shape;
+        if (tensor.shape.length !== inputShape.length) {
+          tensor = tensor.reshape(inputShape);
+        }
+
+        const pred = await modelo.predict(tensor).data();
+        tensor.dispose();
+
+        const maxIndex = pred.indexOf(Math.max(...pred));
+        const clase = clases[maxIndex];
+        const confianza = (pred[maxIndex] * 100).toFixed(2);
+
+        resultadoElement.innerText = `Predicción: ${clase} (${confianza}%)`;
+        resultadoElement.style.color = "#00ff88";
+      } catch (error) {
+        console.error("Error en la predicción:", error);
+        resultadoElement.innerText = "Error en la predicción";
+        resultadoElement.style.color = "#ff5555";
+      }
+    }
+
+    function iniciarPredicciones() {
+      setInterval(() => {
+        if (modeloCargado) {
+          predecir();
+        }
+      }, 1000);
+    }
+
+    cargarModelo();
+    iniciarCamara();
+  </script>
+</body>
+</html>
